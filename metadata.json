@@ -1,0 +1,6 @@
+{
+  "name": "Excel Viewer & Analyzer",
+  "description": "Online Excel workbook viewer with multi-sheet navigation, text and row highlighting, cell criteria filtering, and CSV export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
