@@ -17,12 +17,12 @@ export const DropZoneOverlay: React.FC<DropZoneOverlayProps> = ({ isDragging }) 
         <div>
           <h3 className="text-lg font-bold text-slate-800">Drop Excel or CSV file</h3>
           <p className="text-xs text-slate-500 mt-1">
-            Supports .xlsx, .xls, .csv, .tsv files with multiple sheets
+            Supports .xlsx, .xls, .csv, .tsv files with multiple sheets (up to 10MB)
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs font-medium text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full">
           <FileSpreadsheet className="w-4 h-4" />
-          <span>Release to parse workbook instantly</span>
+          <span>Release to parse in background worker thread</span>
         </div>
       </div>
     </div>

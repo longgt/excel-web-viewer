@@ -17,6 +17,7 @@ interface HeaderProps {
   onOpenExportModal: () => void;
   isFiltered: boolean;
   highlightedRowCount: number;
+  isLoading?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -26,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenExportModal,
   isFiltered,
   highlightedRowCount,
+  isLoading = false,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -84,15 +86,19 @@ export const Header: React.FC<HeaderProps> = ({
           accept=".xlsx,.xls,.csv,.tsv,.ods"
           className="hidden"
           onChange={handleFileChange}
+          disabled={isLoading}
         />
 
         <button
           id="btn-upload-file"
           onClick={() => fileInputRef.current?.click()}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 hover:border-slate-400 transition-colors shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+          disabled={isLoading}
+          title="Upload an Excel (.xlsx, .xls) or CSV file (Max 10MB)"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 hover:border-slate-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-emerald-500 cursor-pointer"
         >
           <Upload className="w-3.5 h-3.5 text-slate-500" />
           <span>Upload Excel / CSV</span>
+          <span className="text-[10px] text-slate-400 font-normal">(&le;10MB)</span>
         </button>
 
         <button

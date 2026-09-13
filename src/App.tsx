@@ -8,22 +8,28 @@ import {
   CellValue,
 } from './types';
 import { SAMPLE_WORKBOOK_SALES } from './data/sampleData';
-import { parseExcelWorkbook } from './utils/excelParser';
+import { parseExcelInBackground, validateFileSize } from './utils/backgroundParser';
 import { applyFilters, FilterResultItem } from './utils/filterEvaluator';
 import { checkCellMatch } from './utils/textHighlighter';
 import { Header } from './components/Header';
 import { Toolbar } from './components/Toolbar';
 import { SpreadsheetGrid } from './components/SpreadsheetGrid';
+import { SpreadsheetSkeleton } from './components/SpreadsheetSkeleton';
 import { SheetTabs } from './components/SheetTabs';
 import { ExportModal } from './components/ExportModal';
 import { ColumnFilterModal } from './components/ColumnFilterModal';
 import { DropZoneOverlay } from './components/DropZoneOverlay';
-import { AlertCircle, FileSpreadsheet, Loader2 } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 export default function App() {
   // Workbook state
   const [workbook, setWorkbook] = useState<WorkbookData>(SAMPLE_WORKBOOK_SALES);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [processingFileInfo, setProcessingFileInfo] = useState<{
+    name: string;
+    size: number;
+    stage: string;
+  } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Active cell inspection state
@@ -286,55 +292,64 @@ export default function App() {
     setSortState({ colIndex, direction });
   };
 
-  // File Upload processor
-  const processUploadedFile = (file: File) => {
+  // File Upload processor with 10MB cap check and background Web Worker execution
+  const processUploadedFile = async (file: File) => {
+    // 1. Enforce strict 10MB file limit
+    const validation = validateFileSize(file.size);
+    if (!validation.valid) {
+      setErrorMessage(validation.error || 'File size exceeds maximum 10MB limit.');
+      return;
+    }
+
     setIsLoading(true);
     setErrorMessage(null);
+    setProcessingFileInfo({
+      name: file.name,
+      size: file.size,
+      stage: 'Reading file buffer and transferring to Web Worker...',
+    });
 
-    const reader = new FileReader();
+    try {
+      const buffer = await file.arrayBuffer();
 
-    reader.onload = (e) => {
-      try {
-        const buffer = e.target?.result as ArrayBuffer;
-        if (!buffer) {
-          throw new Error('Failed to read file contents.');
-        }
+      setProcessingFileInfo((prev) =>
+        prev
+          ? {
+              ...prev,
+              stage: 'Parsing sheets and formulas in background thread without blocking UI...',
+            }
+          : null
+      );
 
-        const parsedWorkbook = parseExcelWorkbook(buffer, file.name, file.size);
+      const parsedWorkbook = await parseExcelInBackground(buffer, file.name, file.size);
 
-        if (parsedWorkbook.sheetNames.length === 0) {
-          throw new Error('No readable sheets found in this Excel file.');
-        }
-
-        setWorkbook(parsedWorkbook);
-        setActiveCell(null);
-        setActiveCellValue('');
-        setSheetFilters({});
-        setSheetRowHighlights({});
-        setSortState(null);
-        setShowOnlyHighlighted(false);
-        setTextHighlight((prev) => ({
-          ...prev,
-          query: '',
-          currentMatchIndex: 0,
-          totalMatches: 0,
-        }));
-      } catch (err: any) {
-        console.error('Excel parsing error:', err);
-        setErrorMessage(
-          err?.message || 'Could not parse the Excel file. Please ensure it is a valid .xlsx, .xls, or .csv document.'
-        );
-      } finally {
-        setIsLoading(false);
+      if (parsedWorkbook.sheetNames.length === 0) {
+        throw new Error('No readable sheets found in this Excel file.');
       }
-    };
 
-    reader.onerror = () => {
-      setErrorMessage('An error occurred reading the uploaded file.');
+      setWorkbook(parsedWorkbook);
+      setActiveCell(null);
+      setActiveCellValue('');
+      setSheetFilters({});
+      setSheetRowHighlights({});
+      setSortState(null);
+      setShowOnlyHighlighted(false);
+      setTextHighlight((prev) => ({
+        ...prev,
+        query: '',
+        currentMatchIndex: 0,
+        totalMatches: 0,
+      }));
+    } catch (err: any) {
+      console.error('Excel background parsing error:', err);
+      setErrorMessage(
+        err?.message ||
+          'Could not parse the Excel file. Please ensure it is a valid .xlsx, .xls, or .csv document.'
+      );
+    } finally {
       setIsLoading(false);
-    };
-
-    reader.readAsArrayBuffer(file);
+      setProcessingFileInfo(null);
+    }
   };
 
   // Drag and drop listeners on window
@@ -409,18 +424,19 @@ export default function App() {
         onOpenExportModal={() => setIsExportModalOpen(true)}
         isFiltered={activeFilters.length > 0 || showOnlyHighlighted}
         highlightedRowCount={activeHighlightedRows.size}
+        isLoading={isLoading}
       />
 
       {/* Error Banner if any file parsing fails */}
       {errorMessage && (
-        <div className="bg-rose-50 border-b border-rose-200 px-4 py-2.5 flex items-center justify-between text-xs text-rose-800">
+        <div className="bg-rose-50 border-b border-rose-200 px-4 py-2.5 flex items-center justify-between text-xs text-rose-800 animate-in fade-in duration-150">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-            <span>{errorMessage}</span>
+            <span className="font-medium">{errorMessage}</span>
           </div>
           <button
             onClick={() => setErrorMessage(null)}
-            className="text-xs font-semibold hover:underline text-rose-700"
+            className="text-xs font-semibold hover:underline text-rose-700 ml-4 shrink-0 cursor-pointer"
           >
             Dismiss
           </button>
@@ -451,12 +467,11 @@ export default function App() {
       {/* Main Spreadsheet Grid Container */}
       <main className="flex-1 flex flex-col min-h-0 relative">
         {isLoading ? (
-          <div className="flex-1 flex flex-col items-center justify-center bg-white gap-3">
-            <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
-            <p className="text-xs font-medium text-slate-600">
-              Parsing Excel workbook and sheets...
-            </p>
-          </div>
+          <SpreadsheetSkeleton
+            fileName={processingFileInfo?.name}
+            fileSize={processingFileInfo?.size}
+            stageMessage={processingFileInfo?.stage}
+          />
         ) : (
           <SpreadsheetGrid
             headers={activeSheet.headers}
