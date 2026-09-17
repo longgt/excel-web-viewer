@@ -175,7 +175,8 @@ export default function App() {
       activeSheet.data,
       activeFilters,
       activeHighlightedRows,
-      showOnlyHighlighted
+      showOnlyHighlighted,
+      activeSheet.cellStyles
     );
 
     // 2. Sort rows if active
@@ -205,11 +206,18 @@ export default function App() {
     return result;
   }, [
     activeSheet.data,
+    activeSheet.cellStyles,
     activeFilters,
     activeHighlightedRows,
     showOnlyHighlighted,
     sortState,
   ]);
+
+  // Active cell style lookup
+  const activeCellStyle = useMemo(() => {
+    if (!activeCell) return null;
+    return activeSheet.cellStyles?.[activeCell.rawRowIndex]?.[activeCell.colIndex] || null;
+  }, [activeCell, activeSheet.cellStyles]);
 
   // Filtered rows for export
   const filteredRowsOnly = useMemo(() => {
@@ -447,6 +455,7 @@ export default function App() {
       <Toolbar
         activeCell={activeCell}
         activeCellValue={activeCellValue}
+        activeCellStyle={activeCellStyle}
         textHighlight={textHighlight}
         onTextHighlightChange={(patch) =>
           setTextHighlight((prev) => ({ ...prev, ...patch }))
@@ -475,6 +484,8 @@ export default function App() {
         ) : (
           <SpreadsheetGrid
             headers={activeSheet.headers}
+            headerStyles={activeSheet.headerStyles}
+            cellStyles={activeSheet.cellStyles}
             filteredItems={filteredResultItems}
             totalRawRows={activeSheet.rowCount}
             activeCell={activeCell}

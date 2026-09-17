@@ -18,11 +18,13 @@ import {
   ColumnFilter,
   RowHighlightConfig,
   TextHighlightConfig,
+  CellStyle,
 } from '../types';
 
 interface ToolbarProps {
   activeCell: CellPosition | null;
   activeCellValue: string;
+  activeCellStyle?: CellStyle | null;
   textHighlight: TextHighlightConfig;
   onTextHighlightChange: (config: Partial<TextHighlightConfig>) => void;
   onNavigateMatch: (direction: 'next' | 'prev') => void;
@@ -50,6 +52,7 @@ const HIGHLIGHT_COLORS: Array<{
 export const Toolbar: React.FC<ToolbarProps> = ({
   activeCell,
   activeCellValue,
+  activeCellStyle,
   textHighlight,
   onTextHighlightChange,
   onNavigateMatch,
@@ -66,8 +69,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     <div className="bg-white border-b border-slate-200 divide-y divide-slate-100 text-xs">
       {/* Top row: Formula bar & Text Search / Sheet Text Highlighting */}
       <div className="px-3 py-2 flex flex-wrap items-center justify-between gap-3">
-        {/* Left: Active cell address & Formula / Value inspection */}
-        <div className="flex items-center gap-2 flex-1 min-w-[260px] max-w-xl">
+        {/* Left: Active cell address & Formula / Value inspection & Formatting indicator */}
+        <div className="flex items-center gap-2 flex-1 min-w-[260px] max-w-2xl">
           <div className="h-8 px-2.5 bg-slate-100 text-slate-700 font-mono font-medium rounded border border-slate-200 flex items-center justify-center shrink-0 min-w-[54px] shadow-2xs">
             {activeCell ? activeCell.cellAddress : '—'}
           </div>
@@ -83,6 +86,84 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               className="w-full h-8 pl-8 pr-3 bg-slate-50 border border-slate-200 rounded text-slate-800 font-mono text-xs focus:outline-hidden focus:bg-white focus:border-emerald-500 transition-colors"
             />
           </div>
+
+          {/* Active cell formatting indicators */}
+          {activeCellStyle && (
+            <div className="hidden xl:flex items-center gap-1.5 px-2 py-1 bg-slate-100/80 border border-slate-200 rounded text-slate-600 shrink-0">
+              {activeCellStyle.fontName && (
+                <span className="text-[11px] font-sans font-medium text-slate-700 truncate max-w-[85px]" title={`Font family: ${activeCellStyle.fontName}`}>
+                  {activeCellStyle.fontName}
+                </span>
+              )}
+              {activeCellStyle.fontSize && (
+                <span className="text-[10px] font-mono text-slate-600 bg-white px-1 py-0.5 rounded border border-slate-200 shadow-2xs" title={`Font size: ${activeCellStyle.fontSize}pt`}>
+                  {activeCellStyle.fontSize}pt
+                </span>
+              )}
+              <div className="flex items-center gap-0.5 border-l border-slate-200 pl-1">
+                <span
+                  className={`w-5 h-5 flex items-center justify-center rounded text-[11px] font-bold ${
+                    activeCellStyle.bold ? 'bg-emerald-100 text-emerald-800 font-extrabold' : 'text-slate-300'
+                  }`}
+                  title={activeCellStyle.bold ? 'Bold' : 'Regular'}
+                >
+                  B
+                </span>
+                <span
+                  className={`w-5 h-5 flex items-center justify-center rounded text-[11px] italic font-serif ${
+                    activeCellStyle.italic ? 'bg-emerald-100 text-emerald-800 font-bold' : 'text-slate-300'
+                  }`}
+                  title={activeCellStyle.italic ? 'Italic' : 'Regular'}
+                >
+                  I
+                </span>
+                <span
+                  className={`w-5 h-5 flex items-center justify-center rounded text-[11px] underline ${
+                    activeCellStyle.underline ? 'bg-emerald-100 text-emerald-800' : 'text-slate-300'
+                  }`}
+                  title={activeCellStyle.underline ? 'Underlined' : 'No underline'}
+                >
+                  U
+                </span>
+                {activeCellStyle.strike && (
+                  <span
+                    className="w-5 h-5 flex items-center justify-center rounded text-[11px] line-through bg-emerald-100 text-emerald-800"
+                    title="Strikethrough"
+                  >
+                    S
+                  </span>
+                )}
+              </div>
+
+              {(activeCellStyle.color || activeCellStyle.backgroundColor) && (
+                <div className="flex items-center gap-1 border-l border-slate-200 pl-1">
+                  {activeCellStyle.color && (
+                    <span
+                      className="w-3.5 h-3.5 rounded-full border border-slate-300 shadow-2xs shrink-0"
+                      style={{ backgroundColor: activeCellStyle.color }}
+                      title={`Text Color: ${activeCellStyle.color}`}
+                    />
+                  )}
+                  {activeCellStyle.backgroundColor && (
+                    <span
+                      className="w-3.5 h-3.5 rounded border border-slate-300 shadow-2xs shrink-0"
+                      style={{ backgroundColor: activeCellStyle.backgroundColor }}
+                      title={`Cell Fill: ${activeCellStyle.backgroundColor}`}
+                    />
+                  )}
+                </div>
+              )}
+
+              {activeCellStyle.borders && (
+                <span
+                  className="text-[9px] uppercase tracking-wider text-slate-600 font-mono px-1 py-0.5 border border-slate-200 rounded bg-white shadow-2xs"
+                  title="Cell borders preserved from Excel"
+                >
+                  border
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right: Text Highlight in Sheet */}

@@ -1,5 +1,32 @@
 export type CellValue = string | number | boolean | null | undefined;
 
+export interface CellBorderSide {
+  style?: 'thin' | 'medium' | 'thick' | 'double' | 'dashed' | 'dotted';
+  color?: string; // CSS color string (e.g. "#94a3b8")
+}
+
+export interface CellBorders {
+  top?: CellBorderSide;
+  right?: CellBorderSide;
+  bottom?: CellBorderSide;
+  left?: CellBorderSide;
+}
+
+export interface CellStyle {
+  fontSize?: number; // font size in pt (e.g. 11, 12, 14, 18)
+  fontName?: string; // font family name (e.g. "Calibri", "Arial")
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strike?: boolean;
+  color?: string; // font color CSS string (e.g. "#1e293b")
+  backgroundColor?: string; // fill color CSS string (e.g. "#fef08a")
+  borders?: CellBorders;
+  horizontalAlign?: 'left' | 'center' | 'right' | 'justify';
+  verticalAlign?: 'top' | 'middle' | 'bottom';
+  wrapText?: boolean;
+}
+
 export interface SheetData {
   name: string;
   data: CellValue[][]; // 2D array of rows and columns (excluding header if hasHeaderRow is true, or including all)
@@ -7,6 +34,9 @@ export interface SheetData {
   rawRows: CellValue[][]; // Complete raw grid
   rowCount: number;
   colCount: number;
+  cellStyles?: (CellStyle | null)[][]; // 2D array of cell styles corresponding to data
+  headerStyles?: (CellStyle | null)[]; // Cell styles corresponding to headers
+  rawStyles?: (CellStyle | null)[][]; // 2D array of cell styles corresponding to rawRows
 }
 
 export interface WorkbookData {

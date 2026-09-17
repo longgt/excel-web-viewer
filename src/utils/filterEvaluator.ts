@@ -1,4 +1,4 @@
-import { CellValue, ColumnFilter } from '../types';
+import { CellValue, ColumnFilter, CellStyle } from '../types';
 
 export function evaluateCellFilter(
   cellVal: CellValue,
@@ -69,6 +69,7 @@ export function evaluateCellFilter(
 
 export interface FilterResultItem {
   row: CellValue[];
+  styles?: (CellStyle | null)[];
   originalIndex: number; // 0-based index in the sheet.data array
 }
 
@@ -76,7 +77,8 @@ export function applyFilters(
   rows: CellValue[][],
   filters: ColumnFilter[],
   highlightedRowIndices: Set<number>,
-  showOnlyHighlighted: boolean
+  showOnlyHighlighted: boolean,
+  cellStyles?: (CellStyle | null)[][]
 ): FilterResultItem[] {
   const result: FilterResultItem[] = [];
 
@@ -101,6 +103,7 @@ export function applyFilters(
     if (passesAll) {
       result.push({
         row,
+        styles: cellStyles ? cellStyles[i] : undefined,
         originalIndex: i,
       });
     }

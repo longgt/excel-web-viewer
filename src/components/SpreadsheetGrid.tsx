@@ -15,13 +15,17 @@ import {
   ColumnFilter,
   RowHighlightConfig,
   TextHighlightConfig,
+  CellStyle,
 } from '../types';
 import { getColumnLetter } from '../utils/excelParser';
+import { cellStyleToCss } from '../utils/styleParser';
 import { renderHighlightedText, checkCellMatch } from '../utils/textHighlighter';
 import { FilterResultItem } from '../utils/filterEvaluator';
 
 interface SpreadsheetGridProps {
   headers: string[];
+  headerStyles?: (CellStyle | null)[];
+  cellStyles?: (CellStyle | null)[][];
   filteredItems: FilterResultItem[];
   totalRawRows: number;
   activeCell: CellPosition | null;
@@ -36,6 +40,8 @@ interface SpreadsheetGridProps {
 
 export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
   headers,
+  headerStyles,
+  cellStyles,
   filteredItems,
   totalRawRows,
   activeCell,
@@ -200,13 +206,20 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
               {headers.map((headerText, colIdx) => {
                 const isFiltered = activeFiltersMap.has(colIdx);
                 const isSorted = sortState?.colIndex === colIdx;
+                const headerStyle = headerStyles?.[colIdx];
+                const headerCss = cellStyleToCss(headerStyle);
 
                 return (
                   <th
                     key={`header-${colIdx}`}
-                    className={`bg-slate-100 border-b border-r border-slate-300 px-3 py-2 text-left font-semibold text-slate-800 select-none min-w-[140px] group transition-colors hover:bg-slate-200/60 ${
-                      isFiltered ? 'bg-emerald-50 text-emerald-900' : ''
-                    }`}
+                    style={headerCss}
+                    className={`border-b border-r border-slate-300 px-3 py-2 text-left font-semibold select-none min-w-[140px] group transition-colors hover:bg-slate-200/60 ${
+                      isFiltered
+                        ? 'bg-emerald-50 text-emerald-900'
+                        : !headerStyle?.backgroundColor
+                        ? 'bg-slate-100'
+                        : ''
+                    } ${!headerStyle?.color ? 'text-slate-800' : ''}`}
                   >
                     <div className="flex items-center justify-between gap-1.5">
                       <span className="truncate font-semibold text-xs tracking-tight" title={headerText}>
@@ -338,9 +351,14 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
 
                         const cellAddress = `${getColumnLetter(colIdx)}${rawRowIndex + 1}`;
 
+                        // Extract cell formatting
+                        const cellStyle = item.styles?.[colIdx] ?? cellStyles?.[rawRowIndex]?.[colIdx];
+                        const cellCss = cellStyleToCss(cellStyle, { isRowHighlighted, isSelected });
+
                         return (
                           <td
                             key={`cell-${rawRowIndex}-${colIdx}`}
+                            style={cellCss}
                             onClick={() =>
                               onSelectCell(
                                 {
@@ -352,13 +370,13 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
                                 displayString
                               )
                             }
-                            className={`border-r border-b border-slate-200 px-3 py-1.5 text-slate-800 text-xs transition-colors cursor-cell min-w-[140px] truncate max-w-sm ${
+                            className={`border-r border-b border-slate-200 px-3 py-1.5 text-xs transition-colors cursor-cell min-w-[140px] truncate max-w-sm ${
                               isSelected
-                                ? 'ring-2 ring-emerald-500 ring-inset bg-emerald-50/50 font-medium'
+                                ? 'ring-2 ring-emerald-500 ring-inset font-medium'
                                 : hasSearchMatch && textHighlight.query.trim()
                                 ? 'bg-amber-100/70'
                                 : ''
-                            }`}
+                            } ${!cellStyle?.color ? 'text-slate-800' : ''}`}
                             title={displayString}
                           >
                             {renderHighlightedText(

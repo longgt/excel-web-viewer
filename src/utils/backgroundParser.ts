@@ -41,12 +41,12 @@ export function parseExcelInBackground(
           }
         };
 
-        worker.onerror = (err) => {
+        worker.onerror = async (err) => {
           worker.terminate();
           if (!isCompleted) {
             console.warn('Worker encountered an error, falling back to local thread parsing:', err);
             try {
-              const fallbackResult = parseExcelWorkbook(buffer, fileName, fileSize);
+              const fallbackResult = await parseExcelWorkbook(buffer, fileName, fileSize);
               resolve(fallbackResult);
             } catch (fallbackError) {
               reject(fallbackError);
@@ -69,11 +69,8 @@ export function parseExcelInBackground(
     }
 
     // Fallback if Worker is not available
-    try {
-      const result = parseExcelWorkbook(buffer, fileName, fileSize);
-      resolve(result);
-    } catch (err) {
-      reject(err);
-    }
+    parseExcelWorkbook(buffer, fileName, fileSize)
+      .then(resolve)
+      .catch(reject);
   });
 }
