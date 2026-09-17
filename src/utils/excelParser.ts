@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { SheetData, WorkbookData, CellValue, CellStyle } from '../types';
 import { extractExcelJsCellStyle, parseExcelColor } from './styleParser';
+import { propagateMergedValues, isRow0Merged, adjustMergesForRowOffset } from './mergeUtils';
 
 export function getColumnLetter(colIndex: number): string {
   let letter = '';
@@ -224,16 +225,27 @@ export async function parseExcelWithExcelJs(
       rawStyles.push([null]);
     }
 
+    // Extract raw merges from ExcelJS
+    const merges = Array.isArray(worksheet.model?.merges) ? [...worksheet.model.merges] : [];
+
+    // Propagate master values to subordinate cells in raw data so filters/searches/copies work seamlessly
+    propagateMergedValues(rawRows, rawStyles, merges);
+
     let headers: string[] = [];
     let headerStyles: (CellStyle | null)[] = [];
     let dataRows: CellValue[][] = [];
     let cellStyles: (CellStyle | null)[][] = [];
+    let finalMerges: string[] = merges;
 
+    // Check if row 0 has merged cells (e.g. A1:D1 title or section banner).
+    // If it has merged cells, Row 1 MUST NOT be sliced off as a column header,
+    // otherwise the merged table/title disappears from the grid!
+    const row0HasMerge = isRow0Merged(merges);
     const firstRow = rawRows[0];
     const firstRowStyles = rawStyles[0];
     const hasAnyHeaderVal = firstRow.some((val) => val !== '' && val !== null && val !== undefined);
 
-    if (hasAnyHeaderVal) {
+    if (!row0HasMerge && hasAnyHeaderVal) {
       headers = firstRow.map((val, idx) => {
         const str = String(val ?? '').trim();
         return str.length > 0 ? str : `Col ${getColumnLetter(idx)}`;
@@ -241,11 +253,13 @@ export async function parseExcelWithExcelJs(
       headerStyles = firstRowStyles;
       dataRows = rawRows.slice(1);
       cellStyles = rawStyles.slice(1);
+      finalMerges = adjustMergesForRowOffset(merges, -1);
     } else {
       headers = Array.from({ length: maxCols }, (_, i) => getColumnLetter(i));
       headerStyles = new Array(maxCols).fill(null);
       dataRows = rawRows;
       cellStyles = rawStyles;
+      finalMerges = merges;
     }
 
     // Extract Column Widths in pixels from Excel
@@ -274,7 +288,6 @@ export async function parseExcelWithExcelJs(
     // Extract Tab Color & Gridlines view options
     const tabColor = parseExcelColor(worksheet.properties?.tabColor);
     const showGridLines = worksheet.views?.[0]?.showGridLines !== false;
-    const merges = Array.isArray(worksheet.model?.merges) ? [...worksheet.model.merges] : [];
 
     sheets[sheetName] = {
       name: sheetName,
@@ -290,7 +303,7 @@ export async function parseExcelWithExcelJs(
       rowHeights,
       tabColor,
       showGridLines,
-      merges,
+      merges: finalMerges,
     };
   }
 
@@ -346,26 +359,49 @@ export function parseExcelWithSheetJS(
       return fullRow;
     });
 
+    const rawMerges: string[] = Array.isArray(worksheet['!merges'])
+      ? worksheet['!merges'].map((m) => XLSX.utils.encode_range(m))
+      : [];
+
+    const rawStyles = normalizedRows.map(() => new Array(maxCols).fill(null));
+
+    // Propagate master values to subordinate cells in raw data so filters/searches work seamlessly
+    propagateMergedValues(normalizedRows, rawStyles, rawMerges);
+
     let headers: string[] = [];
+    let headerStyles: (CellStyle | null)[] = [];
     let dataRows: CellValue[][] = [];
+    let cellStyles: (CellStyle | null)[][] = [];
+    let finalMerges: string[] = rawMerges;
+
+    const row0HasMerge = isRow0Merged(rawMerges);
 
     if (normalizedRows.length > 0) {
       const firstRow = normalizedRows[0];
       const hasAnyNonEmpty = firstRow.some((val) => val !== '' && val !== null && val !== undefined);
 
-      if (hasAnyNonEmpty) {
+      if (!row0HasMerge && hasAnyNonEmpty) {
         headers = firstRow.map((val, idx) => {
           const str = String(val ?? '').trim();
           return str.length > 0 ? str : `Col ${getColumnLetter(idx)}`;
         });
+        headerStyles = new Array(headers.length).fill(null);
         dataRows = normalizedRows.slice(1);
+        cellStyles = dataRows.map(() => new Array(headers.length).fill(null));
+        finalMerges = adjustMergesForRowOffset(rawMerges, -1);
       } else {
         headers = Array.from({ length: maxCols }, (_, i) => getColumnLetter(i));
+        headerStyles = new Array(maxCols).fill(null);
         dataRows = normalizedRows;
+        cellStyles = rawStyles;
+        finalMerges = rawMerges;
       }
     } else {
       headers = [getColumnLetter(0)];
+      headerStyles = [null];
       dataRows = [];
+      cellStyles = [];
+      finalMerges = [];
     }
 
     // Extract Column Widths from SheetJS !cols
@@ -407,12 +443,13 @@ export function parseExcelWithSheetJS(
       rawRows: normalizedRows,
       rowCount: dataRows.length,
       colCount: headers.length,
-      cellStyles: dataRows.map(() => new Array(headers.length).fill(null)),
-      headerStyles: new Array(headers.length).fill(null),
-      rawStyles: normalizedRows.map(() => new Array(headers.length).fill(null)),
+      cellStyles,
+      headerStyles,
+      rawStyles,
       columnWidths,
       rowHeights,
       showGridLines: true,
+      merges: finalMerges,
     };
   }
 

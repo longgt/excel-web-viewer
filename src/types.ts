@@ -28,6 +28,15 @@ export interface CellStyle {
   numFmt?: string; // Excel number format string (e.g. "$#,##0.00", "0.0%")
 }
 
+export interface MergedCellRange {
+  startRow: number; // 0-based row index in the sheet/table
+  startCol: number; // 0-based column index
+  endRow: number; // 0-based row index
+  endCol: number; // 0-based column index
+  rowSpan: number; // endRow - startRow + 1
+  colSpan: number; // endCol - startCol + 1
+}
+
 export interface SheetData {
   name: string;
   data: CellValue[][]; // 2D array of rows and columns (excluding header if hasHeaderRow is true, or including all)

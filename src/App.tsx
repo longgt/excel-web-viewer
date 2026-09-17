@@ -514,6 +514,7 @@ export default function App() {
             columnWidths={activeSheet.columnWidths}
             rowHeights={activeSheet.rowHeights}
             showGridLines={showGridLines}
+            merges={activeSheet.merges}
           />
         )}
       </main>

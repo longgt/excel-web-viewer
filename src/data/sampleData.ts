@@ -3,9 +3,31 @@ import { SheetData, WorkbookData, CellStyle } from '../types';
 export const SAMPLE_WORKBOOK_SALES: WorkbookData = {
   fileName: 'Global_Sales_Q3_Performance.xlsx',
   fileSize: 48520,
-  sheetNames: ['Orders & Revenue', 'Regional Breakdown', 'Top Accounts', 'Product Inventory'],
-  activeSheetName: 'Orders & Revenue',
+  sheetNames: ['Executive Summary', 'Orders & Revenue', 'Regional Breakdown', 'Top Accounts', 'Product Inventory'],
+  activeSheetName: 'Executive Summary',
   sheets: {
+    'Executive Summary': {
+      name: 'Executive Summary',
+      headers: ['A', 'B', 'C', 'D'],
+      data: [
+        ['Q3 Global Performance & Strategy Overview', 'Q3 Global Performance & Strategy Overview', 'Q3 Global Performance & Strategy Overview', 'Q3 Global Performance & Strategy Overview'],
+        ['Key Business Metric', 'Q3 Target', 'Q3 Actual', 'Variance'],
+        ['Total Net Revenue', '$350,000', '$362,500', '+$12,500'],
+        ['Gross Margin', '68.0%', '71.4%', '+3.4%'],
+        ['Strategic Accounts', '45', '48', '+3'],
+        ['Regional Performance Highlights', 'Regional Performance Highlights', 'Regional Performance Highlights', 'Regional Performance Highlights'],
+        ['North America', '$95,000', '$93,680', '-$1,320'],
+        ['Europe', '$70,000', '$61,400', '-$8,600'],
+        ['Asia Pacific', '$65,000', '$68,200', '+$3,200'],
+      ],
+      rawRows: [],
+      rowCount: 9,
+      colCount: 4,
+      tabColor: '#059669', // Emerald
+      columnWidths: [220, 140, 140, 140],
+      showGridLines: true,
+      merges: ['A1:D1', 'A6:D6'],
+    },
     'Orders & Revenue': {
       name: 'Orders & Revenue',
       headers: ['Order ID', 'Customer Name', 'Region', 'Segment', 'Product Category', 'Sales ($)', 'Quantity', 'Discount', 'Profit ($)', 'Status', 'Order Date'],
@@ -110,6 +132,37 @@ function initializeSampleStyles(sheet: SheetData) {
     return row.map((val, cIdx): CellStyle | null => {
       const header = sheet.headers[cIdx];
       const strVal = String(val ?? '').trim();
+
+      if (sheet.name === 'Executive Summary') {
+        if (strVal.includes('Overview')) {
+          return {
+            bold: true,
+            fontSize: 12,
+            backgroundColor: '#064e3b',
+            color: '#ffffff',
+            horizontalAlign: 'center',
+          };
+        }
+        if (strVal.includes('Highlights')) {
+          return {
+            bold: true,
+            fontSize: 11,
+            backgroundColor: '#e2e8f0',
+            color: '#0f172a',
+            horizontalAlign: 'center',
+          };
+        }
+        if (strVal === 'Key Business Metric' || strVal === 'Q3 Target' || strVal === 'Q3 Actual' || strVal === 'Variance') {
+          return {
+            bold: true,
+            backgroundColor: '#f8fafc',
+            color: '#334155',
+            borders: {
+              bottom: { style: 'thin', color: '#cbd5e1' },
+            },
+          };
+        }
+      }
 
       // Status pill styling
       if (header === 'Status') {

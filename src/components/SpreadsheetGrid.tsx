@@ -22,6 +22,7 @@ import { renderHighlightedText, checkCellMatch } from '../utils/textHighlighter'
 import { FilterResultItem } from '../utils/filterEvaluator';
 import { copyToClipboard } from '../utils/clipboard';
 import { CellContextMenu } from './CellContextMenu';
+import { buildMergeMaps, parseMergeRange } from '../utils/mergeUtils';
 
 interface SpreadsheetGridProps {
   headers: string[];
@@ -40,6 +41,7 @@ interface SpreadsheetGridProps {
   columnWidths?: number[];
   rowHeights?: (number | undefined)[];
   showGridLines?: boolean;
+  merges?: string[];
 }
 
 export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
@@ -59,6 +61,7 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
   columnWidths,
   rowHeights,
   showGridLines = true,
+  merges,
 }) => {
   // Local state for column widths to support Excel-like interactive dragging/resizing
   const [colWidths, setColWidths] = useState<number[]>(() => {
@@ -183,6 +186,16 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
     };
   }, [filteredItems]);
 
+  // Pre-calculate fast merge lookup maps
+  const mergeMaps = useMemo(() => buildMergeMaps(merges), [merges]);
+
+  const hasRowMerges = useMemo(() => {
+    return (merges || []).some((m) => {
+      const parsed = parseMergeRange(m);
+      return parsed && parsed.rowSpan > 1;
+    });
+  }, [merges]);
+
   // Viewport scroll container ref for TanStack Virtual
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -195,7 +208,7 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
       const h = item ? rowHeights?.[item.originalIndex] : undefined;
       return typeof h === 'number' && h > 0 ? Math.max(24, h) : 28;
     },
-    overscan: 14,
+    overscan: hasRowMerges ? Math.max(filteredItems.length, 50) : 14,
   });
 
   const virtualRows = rowVirtualizer.getVirtualItems();
@@ -342,10 +355,16 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
       let nextDisplayIndex = activeDisplayIndex >= 0 ? activeDisplayIndex : 0;
       let nextCol = activeCell.colIndex;
 
+      const currentCellKey = `${activeCell.rawRowIndex},${activeCell.colIndex}`;
+      const currentMerge = mergeMaps.masterMap.get(currentCellKey);
+
       if (e.key === 'ArrowDown' || (e.key === 'Enter' && !e.shiftKey)) {
         e.preventDefault();
-        if (nextDisplayIndex < filteredItems.length - 1) {
-          nextDisplayIndex += 1;
+        const step = currentMerge && currentMerge.rowSpan > 1 ? currentMerge.rowSpan : 1;
+        if (nextDisplayIndex + step < filteredItems.length) {
+          nextDisplayIndex += step;
+        } else if (nextDisplayIndex < filteredItems.length - 1) {
+          nextDisplayIndex = filteredItems.length - 1;
         }
       } else if (e.key === 'ArrowUp' || (e.key === 'Enter' && e.shiftKey)) {
         e.preventDefault();
@@ -354,8 +373,11 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
         }
       } else if (e.key === 'ArrowRight' || (e.key === 'Tab' && !e.shiftKey)) {
         e.preventDefault();
-        if (nextCol < headers.length - 1) {
-          nextCol += 1;
+        const step = currentMerge && currentMerge.colSpan > 1 ? currentMerge.colSpan : 1;
+        if (nextCol + step < headers.length) {
+          nextCol += step;
+        } else if (nextCol < headers.length - 1) {
+          nextCol = headers.length - 1;
         }
       } else if (e.key === 'ArrowLeft' || (e.key === 'Tab' && e.shiftKey)) {
         e.preventDefault();
@@ -639,6 +661,39 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
 
                       {/* Data Cells */}
                       {headers.map((_, colIdx) => {
+                        const cellKey = `${rawRowIndex},${colIdx}`;
+
+                        // Check if this cell is covered/subordinate to a merged range
+                        const coveredInfo = mergeMaps.coveredMap.get(cellKey);
+                        if (coveredInfo) {
+                          // If covered horizontally on the same row, skip rendering
+                          if (coveredInfo.masterRow === rawRowIndex) {
+                            return null;
+                          }
+                          // If covered vertically by a row above:
+                          // Skip rendering only if the master row is present in the visible filtered items
+                          const isMasterVisible = filteredItems.some(
+                            (it) => it.originalIndex === coveredInfo.masterRow
+                          );
+                          if (isMasterVisible) {
+                            return null;
+                          }
+                        }
+
+                        // Check if this cell is the top-left master of a merged range
+                        const mergeRange = mergeMaps.masterMap.get(cellKey);
+                        const colSpan = mergeRange && mergeRange.colSpan > 1 ? mergeRange.colSpan : 1;
+                        let rowSpan = 1;
+                        if (mergeRange && mergeRange.rowSpan > 1) {
+                          let visibleRowsCount = 0;
+                          for (let r = mergeRange.startRow; r <= mergeRange.endRow; r++) {
+                            if (filteredItems.some((it) => it.originalIndex === r)) {
+                              visibleRowsCount++;
+                            }
+                          }
+                          rowSpan = Math.max(1, visibleRowsCount);
+                        }
+
                         const cellVal = item.row[colIdx];
                         const displayString =
                           cellVal === null || cellVal === undefined ? '' : String(cellVal);
@@ -661,15 +716,30 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
                         // Extract cell formatting
                         const cellStyle = item.styles?.[colIdx] ?? cellStyles?.[rawRowIndex]?.[colIdx];
                         const cellCss = cellStyleToCss(cellStyle, { isRowHighlighted, isSelected, value: cellVal });
-                        const w = colWidths[colIdx] || 140;
+
+                        // Calculate width across spanned columns
+                        let w = colWidths[colIdx] || 140;
+                        if (colSpan > 1) {
+                          w = 0;
+                          for (let c = colIdx; c < colIdx + colSpan && c < headers.length; c++) {
+                            w += colWidths[c] || 140;
+                          }
+                        }
 
                         return (
                           <td
                             key={`cell-${rawRowIndex}-${colIdx}`}
+                            colSpan={colSpan > 1 ? colSpan : undefined}
+                            rowSpan={rowSpan > 1 ? rowSpan : undefined}
                             style={{
                               ...cellCss,
                               width: `${w}px`,
+                              minWidth: `${w}px`,
                               borderColor: showGridLines ? undefined : 'transparent',
+                              textAlign:
+                                colSpan > 1 && !cellStyle?.horizontalAlign
+                                  ? 'center'
+                                  : cellCss.textAlign,
                             }}
                             onClick={() =>
                               onSelectCell(
