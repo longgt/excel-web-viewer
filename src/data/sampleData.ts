@@ -29,6 +29,9 @@ export const SAMPLE_WORKBOOK_SALES: WorkbookData = {
       rawRows: [],
       rowCount: 15,
       colCount: 11,
+      tabColor: '#107c41', // Excel Green
+      columnWidths: [110, 190, 140, 130, 170, 120, 95, 95, 120, 115, 120],
+      showGridLines: true,
     },
     'Regional Breakdown': {
       name: 'Regional Breakdown',
@@ -43,6 +46,9 @@ export const SAMPLE_WORKBOOK_SALES: WorkbookData = {
       rawRows: [],
       rowCount: 5,
       colCount: 7,
+      tabColor: '#2563eb', // Blue
+      columnWidths: [150, 170, 130, 130, 125, 110, 140],
+      showGridLines: true,
     },
     'Top Accounts': {
       name: 'Top Accounts',
@@ -58,6 +64,9 @@ export const SAMPLE_WORKBOOK_SALES: WorkbookData = {
       rawRows: [],
       rowCount: 6,
       colCount: 7,
+      tabColor: '#7c3aed', // Purple
+      columnWidths: [190, 170, 140, 170, 125, 115, 150],
+      showGridLines: true,
     },
     'Product Inventory': {
       name: 'Product Inventory',
@@ -74,6 +83,9 @@ export const SAMPLE_WORKBOOK_SALES: WorkbookData = {
       rawRows: [],
       rowCount: 7,
       colCount: 7,
+      tabColor: '#ea580c', // Orange
+      columnWidths: [110, 210, 150, 130, 140, 120, 130],
+      showGridLines: true,
     },
   },
 };

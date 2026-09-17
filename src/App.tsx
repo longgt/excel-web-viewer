@@ -64,6 +64,9 @@ export default function App() {
     direction: 'asc' | 'desc';
   } | null>(null);
 
+  // Gridlines display state
+  const [showGridLines, setShowGridLines] = useState<boolean>(true);
+
   // UI Modals state
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [filterModalCol, setFilterModalCol] = useState<number | null>(null);
@@ -78,6 +81,13 @@ export default function App() {
     rowCount: 0,
     colCount: 0,
   };
+
+  // Sync gridline visibility with active sheet preference
+  useEffect(() => {
+    if (activeSheet.showGridLines !== undefined) {
+      setShowGridLines(activeSheet.showGridLines);
+    }
+  }, [workbook.activeSheetName, activeSheet.showGridLines]);
 
   // Current active sheet's highlighted rows
   const activeHighlightedRows = useMemo(() => {
@@ -471,6 +481,8 @@ export default function App() {
         filters={activeFilters}
         onRemoveFilter={handleRemoveFilter}
         onClearAllFilters={handleClearAllFilters}
+        showGridLines={showGridLines}
+        onToggleGridLines={() => setShowGridLines((prev) => !prev)}
       />
 
       {/* Main Spreadsheet Grid Container */}
@@ -499,6 +511,9 @@ export default function App() {
             filters={activeFilters}
             onOpenColumnFilter={(colIdx) => setFilterModalCol(colIdx)}
             sortState={sortState}
+            columnWidths={activeSheet.columnWidths}
+            rowHeights={activeSheet.rowHeights}
+            showGridLines={showGridLines}
           />
         )}
       </main>

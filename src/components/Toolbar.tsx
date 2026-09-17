@@ -12,6 +12,10 @@ import {
   Eye,
   FilterX,
   CaseSensitive,
+  Grid,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
 } from 'lucide-react';
 import {
   CellPosition,
@@ -34,6 +38,8 @@ interface ToolbarProps {
   filters: ColumnFilter[];
   onRemoveFilter: (colIndex: number) => void;
   onClearAllFilters: () => void;
+  showGridLines?: boolean;
+  onToggleGridLines?: () => void;
 }
 
 const HIGHLIGHT_COLORS: Array<{
@@ -62,6 +68,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   filters,
   onRemoveFilter,
   onClearAllFilters,
+  showGridLines = true,
+  onToggleGridLines,
 }) => {
   const highlightedRowCount = rowHighlight.highlightedRowKeys.size;
 
@@ -100,6 +108,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                   {activeCellStyle.fontSize}pt
                 </span>
               )}
+
+              {/* Text formatting B/I/U/S */}
               <div className="flex items-center gap-0.5 border-l border-slate-200 pl-1">
                 <span
                   className={`w-5 h-5 flex items-center justify-center rounded text-[11px] font-bold ${
@@ -135,6 +145,25 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 )}
               </div>
 
+              {/* Horizontal Alignment indicator */}
+              {activeCellStyle.horizontalAlign && (
+                <div className="flex items-center text-slate-500 border-l border-slate-200 pl-1" title={`Alignment: ${activeCellStyle.horizontalAlign}`}>
+                  {activeCellStyle.horizontalAlign === 'center' && <AlignCenter className="w-3.5 h-3.5 text-emerald-700" />}
+                  {activeCellStyle.horizontalAlign === 'right' && <AlignRight className="w-3.5 h-3.5 text-emerald-700" />}
+                  {activeCellStyle.horizontalAlign === 'left' && <AlignLeft className="w-3.5 h-3.5 text-emerald-700" />}
+                </div>
+              )}
+
+              {/* Number Format tag */}
+              {activeCellStyle.numFmt && activeCellStyle.numFmt !== 'General' && (
+                <span
+                  className="text-[9px] font-mono text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 max-w-[85px] truncate"
+                  title={`Excel Number Format: ${activeCellStyle.numFmt}`}
+                >
+                  {activeCellStyle.numFmt}
+                </span>
+              )}
+
               {(activeCellStyle.color || activeCellStyle.backgroundColor) && (
                 <div className="flex items-center gap-1 border-l border-slate-200 pl-1">
                   {activeCellStyle.color && (
@@ -166,8 +195,23 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           )}
         </div>
 
-        {/* Right: Text Highlight in Sheet */}
+        {/* Right: Text Highlight in Sheet & View Controls */}
         <div className="flex items-center gap-2 flex-wrap">
+          {onToggleGridLines && (
+            <button
+              onClick={onToggleGridLines}
+              className={`h-8 px-2 rounded border flex items-center gap-1 text-[11px] transition-colors cursor-pointer ${
+                showGridLines
+                  ? 'bg-slate-100 border-slate-300 text-slate-800 font-medium'
+                  : 'bg-white border-slate-200 text-slate-400 hover:text-slate-700'
+              }`}
+              title="Toggle Excel Gridlines"
+            >
+              <Grid className="w-3.5 h-3.5" />
+              <span>Gridlines</span>
+            </button>
+          )}
+
           <div className="relative flex items-center">
             <Search className="w-3.5 h-3.5 absolute left-2.5 text-slate-400 pointer-events-none" />
             <input

@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { SheetData, WorkbookData, CellValue, CellStyle } from '../types';
-import { extractExcelJsCellStyle } from './styleParser';
+import { extractExcelJsCellStyle, parseExcelColor } from './styleParser';
 
 export function getColumnLetter(colIndex: number): string {
   let letter = '';
@@ -14,6 +14,75 @@ export function getColumnLetter(colIndex: number): string {
 }
 
 /**
+ * Formats a value according to an Excel numFmt string
+ */
+export function formatExcelValue(val: any, numFmt?: string): CellValue {
+  if (val === null || val === undefined || val === '') return '';
+
+  if (!numFmt || numFmt === 'General' || numFmt === '@') {
+    if (val instanceof Date) {
+      return val.toISOString().split('T')[0];
+    }
+    if (typeof val === 'number') {
+      return Number(val.toPrecision(12)).toString();
+    }
+    return val;
+  }
+
+  if (typeof val === 'string') {
+    return val;
+  }
+
+  // Handle Date
+  if (val instanceof Date || (typeof val === 'number' && /yy|dd|mm|hh|ss/i.test(numFmt))) {
+    try {
+      const cleanFmt = numFmt.replace(/\\/g, '').replace(/\[[^\]]+\]/g, '');
+      return XLSX.SSF.format(cleanFmt, val);
+    } catch {
+      if (val instanceof Date) return val.toISOString().split('T')[0];
+    }
+  }
+
+  if (typeof val === 'number') {
+    const hasDollar = numFmt.includes('$');
+    const hasEuro = numFmt.includes('€');
+    const hasPound = numFmt.includes('£');
+    const hasYen = numFmt.includes('¥');
+    const hasPercent = numFmt.includes('%');
+
+    let cleanFmt = numFmt
+      .replace(/\[\$.*?\]/g, '')
+      .replace(/"[^"]*"/g, '')
+      .replace(/_/g, '')
+      .replace(/\\./g, '')
+      .replace(/\*/g, '')
+      .trim();
+
+    if (cleanFmt.includes(';')) {
+      const parts = cleanFmt.split(';');
+      cleanFmt = val < 0 && parts.length > 1 ? parts[1] : parts[0];
+    }
+
+    if (cleanFmt.startsWith('0,')) cleanFmt = '#' + cleanFmt;
+
+    try {
+      let formatted = XLSX.SSF.format(cleanFmt, val);
+      if (hasDollar && !formatted.includes('$')) formatted = (val < 0 ? '-$' : '$') + formatted.replace(/^-/, '');
+      if (hasEuro && !formatted.includes('€')) formatted = formatted + ' €';
+      if (hasPound && !formatted.includes('£')) formatted = '£' + formatted;
+      if (hasYen && !formatted.includes('¥')) formatted = '¥' + formatted;
+      return formatted;
+    } catch {
+      if (hasPercent) return (val * 100).toFixed(1) + '%';
+      if (hasDollar) return '$' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return val.toLocaleString();
+    }
+  }
+
+  return String(val);
+}
+
+/**
  * Extracts normalized CellValue from an ExcelJS Cell
  */
 export function extractExcelJsCellValue(cell: any): CellValue {
@@ -22,20 +91,26 @@ export function extractExcelJsCellValue(cell: any): CellValue {
   }
 
   const val = cell.value;
+  const numFmt = cell.numFmt;
 
   // 1. Primitive types
-  if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
-    // If formatted display text is provided (currency, percentage, formatted date), use it
-    if (typeof val === 'number' && cell.numFmt && cell.text) {
-      return cell.text;
+  if (typeof val === 'string') {
+    return val;
+  }
+  if (typeof val === 'boolean') {
+    return val;
+  }
+  if (typeof val === 'number') {
+    if (numFmt && numFmt !== 'General') {
+      return formatExcelValue(val, numFmt);
     }
     return val;
   }
 
   // 2. Date object
   if (val instanceof Date) {
-    if (cell.text && typeof cell.text === 'string' && cell.text.trim()) {
-      return cell.text;
+    if (numFmt && numFmt !== 'General') {
+      return formatExcelValue(val, numFmt);
     }
     return val.toISOString().split('T')[0];
   }
@@ -43,12 +118,14 @@ export function extractExcelJsCellValue(cell: any): CellValue {
   // 3. Formula object: { formula: string, result: any }
   if (typeof val === 'object' && 'result' in val) {
     if (val.result !== undefined && val.result !== null) {
+      if (numFmt && numFmt !== 'General') {
+        return formatExcelValue(val.result, numFmt);
+      }
       if (val.result instanceof Date) {
-        return cell.text || val.result.toISOString().split('T')[0];
+        return val.result.toISOString().split('T')[0];
       }
       return val.result;
     }
-    if (cell.text) return cell.text;
     return `=${val.formula}`;
   }
 
@@ -171,6 +248,34 @@ export async function parseExcelWithExcelJs(
       cellStyles = rawStyles;
     }
 
+    // Extract Column Widths in pixels from Excel
+    const columnWidths: number[] = [];
+    for (let cIdx = 1; cIdx <= maxCols; cIdx++) {
+      const col = worksheet.getColumn(cIdx);
+      if (col && typeof col.width === 'number' && col.width > 0) {
+        // Excel column width units to pixels
+        columnWidths.push(Math.max(65, Math.min(600, Math.round(col.width * 8.2 + 12))));
+      } else {
+        columnWidths.push(140);
+      }
+    }
+
+    // Extract Row Heights in pixels from Excel
+    const rowHeights: (number | undefined)[] = [];
+    for (let rIdx = 1; rIdx <= rawRows.length; rIdx++) {
+      const row = worksheet.getRow(rIdx);
+      if (row && typeof row.height === 'number' && row.height > 0) {
+        rowHeights.push(Math.round(row.height * 1.33));
+      } else {
+        rowHeights.push(undefined);
+      }
+    }
+
+    // Extract Tab Color & Gridlines view options
+    const tabColor = parseExcelColor(worksheet.properties?.tabColor);
+    const showGridLines = worksheet.views?.[0]?.showGridLines !== false;
+    const merges = Array.isArray(worksheet.model?.merges) ? [...worksheet.model.merges] : [];
+
     sheets[sheetName] = {
       name: sheetName,
       data: dataRows,
@@ -181,6 +286,11 @@ export async function parseExcelWithExcelJs(
       cellStyles,
       headerStyles,
       rawStyles,
+      columnWidths,
+      rowHeights,
+      tabColor,
+      showGridLines,
+      merges,
     };
   }
 
@@ -258,6 +368,38 @@ export function parseExcelWithSheetJS(
       dataRows = [];
     }
 
+    // Extract Column Widths from SheetJS !cols
+    const columnWidths: number[] = [];
+    if (worksheet['!cols']) {
+      for (let c = 0; c < headers.length; c++) {
+        const colInfo = worksheet['!cols'][c];
+        if (colInfo?.wch) {
+          columnWidths.push(Math.max(65, Math.min(600, Math.round(colInfo.wch * 8.2 + 12))));
+        } else if (colInfo?.wpx) {
+          columnWidths.push(Math.max(65, Math.min(600, colInfo.wpx)));
+        } else {
+          columnWidths.push(140);
+        }
+      }
+    } else {
+      columnWidths.push(...new Array(headers.length).fill(140));
+    }
+
+    // Extract Row Heights from SheetJS !rows
+    const rowHeights: (number | undefined)[] = [];
+    if (worksheet['!rows']) {
+      for (let r = 0; r < normalizedRows.length; r++) {
+        const rowInfo = worksheet['!rows'][r];
+        if (rowInfo?.hpt) {
+          rowHeights.push(Math.round(rowInfo.hpt * 1.33));
+        } else if (rowInfo?.hpx) {
+          rowHeights.push(rowInfo.hpx);
+        } else {
+          rowHeights.push(undefined);
+        }
+      }
+    }
+
     sheets[sheetName] = {
       name: sheetName,
       data: dataRows,
@@ -268,6 +410,9 @@ export function parseExcelWithSheetJS(
       cellStyles: dataRows.map(() => new Array(headers.length).fill(null)),
       headerStyles: new Array(headers.length).fill(null),
       rawStyles: normalizedRows.map(() => new Array(headers.length).fill(null)),
+      columnWidths,
+      rowHeights,
+      showGridLines: true,
     };
   }
 

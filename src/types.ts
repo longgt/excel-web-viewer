@@ -25,6 +25,7 @@ export interface CellStyle {
   horizontalAlign?: 'left' | 'center' | 'right' | 'justify';
   verticalAlign?: 'top' | 'middle' | 'bottom';
   wrapText?: boolean;
+  numFmt?: string; // Excel number format string (e.g. "$#,##0.00", "0.0%")
 }
 
 export interface SheetData {
@@ -37,6 +38,11 @@ export interface SheetData {
   cellStyles?: (CellStyle | null)[][]; // 2D array of cell styles corresponding to data
   headerStyles?: (CellStyle | null)[]; // Cell styles corresponding to headers
   rawStyles?: (CellStyle | null)[][]; // 2D array of cell styles corresponding to rawRows
+  columnWidths?: number[]; // Pixel widths for each column preserved from Excel
+  rowHeights?: (number | undefined)[]; // Row heights in pixels preserved from Excel
+  tabColor?: string; // Sheet tab color hex/rgba from Excel
+  showGridLines?: boolean; // Whether grid lines are shown in original Excel view
+  merges?: string[]; // Merged ranges (e.g. ['A1:D1', 'B2:C2'])
 }
 
 export interface WorkbookData {

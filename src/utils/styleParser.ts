@@ -1,5 +1,5 @@
 import React from 'react';
-import { CellStyle, CellBorders, CellBorderSide } from '../types';
+import { CellStyle, CellBorders, CellBorderSide, CellValue } from '../types';
 
 const THEME_PALETTE = [
   '#FFFFFF', // 0: Light 1
@@ -216,6 +216,12 @@ export function extractExcelJsCellStyle(cell: any): CellStyle | null {
     }
   }
 
+  // 5. Number Format code
+  if (cell.numFmt && typeof cell.numFmt === 'string' && cell.numFmt !== 'General' && cell.numFmt !== '@') {
+    style.numFmt = cell.numFmt;
+    hasAny = true;
+  }
+
   return hasAny ? style : null;
 }
 
@@ -224,11 +230,30 @@ export function extractExcelJsCellStyle(cell: any): CellStyle | null {
  */
 export function cellStyleToCss(
   style: CellStyle | null | undefined,
-  options?: { isRowHighlighted?: boolean; isSelected?: boolean }
+  options?: { isRowHighlighted?: boolean; isSelected?: boolean; value?: CellValue }
 ): React.CSSProperties {
-  if (!style) return {};
-
   const css: React.CSSProperties = {};
+
+  if (!style) {
+    // If no explicit style, apply Excel default alignment based on value type
+    if (options?.value !== undefined && options.value !== null && options.value !== '') {
+      const val = options.value;
+      if (typeof val === 'number') {
+        css.textAlign = 'right';
+      } else if (typeof val === 'boolean') {
+        css.textAlign = 'center';
+      } else if (typeof val === 'string') {
+        const trimmed = val.trim();
+        // Check for currency ($100, €50, ¥500), percentage (50%), or pure number
+        if (/^[\$\€\£\¥\₹]?\s*-?[\d,]+(\.\d+)?%?$/.test(trimmed) || /^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+          css.textAlign = 'right';
+        } else if (/^(true|false|#n\/a|#value!|#ref!|#div\/0!)$/i.test(trimmed)) {
+          css.textAlign = 'center';
+        }
+      }
+    }
+    return css;
+  }
 
   // Font size
   if (style.fontSize) {
@@ -237,7 +262,7 @@ export function cellStyleToCss(
 
   // Font family
   if (style.fontName) {
-    css.fontFamily = `"${style.fontName}", system-ui, sans-serif`;
+    css.fontFamily = `"${style.fontName}", Calibri, Aptos, "Segoe UI", Arial, sans-serif`;
   }
 
   // Bold & Italic
@@ -290,6 +315,21 @@ export function cellStyleToCss(
   // Text Alignment
   if (style.horizontalAlign) {
     css.textAlign = style.horizontalAlign;
+  } else if (options?.value !== undefined && options.value !== null && options.value !== '') {
+    // Default Excel alignment: numbers/percentages/dates right-aligned, booleans centered
+    const val = options.value;
+    if (typeof val === 'number') {
+      css.textAlign = 'right';
+    } else if (typeof val === 'boolean') {
+      css.textAlign = 'center';
+    } else if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (/^[\$\€\£\¥\₹]?\s*-?[\d,]+(\.\d+)?%?$/.test(trimmed) || /^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        css.textAlign = 'right';
+      } else if (/^(true|false|#n\/a|#value!|#ref!|#div\/0!)$/i.test(trimmed)) {
+        css.textAlign = 'center';
+      }
+    }
   }
   if (style.verticalAlign) {
     css.verticalAlign = style.verticalAlign;
