@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Search,
   ChevronUp,
@@ -16,6 +16,7 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
+  Copy,
 } from 'lucide-react';
 import {
   CellPosition,
@@ -24,6 +25,7 @@ import {
   TextHighlightConfig,
   CellStyle,
 } from '../types';
+import { copyToClipboard } from '../utils/clipboard';
 
 interface ToolbarProps {
   activeCell: CellPosition | null;
@@ -72,6 +74,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onToggleGridLines,
 }) => {
   const highlightedRowCount = rowHighlight.highlightedRowKeys.size;
+  const [hasCopiedFormula, setHasCopiedFormula] = useState(false);
 
   return (
     <div className="bg-white border-b border-slate-200 divide-y divide-slate-100 text-xs">
@@ -82,7 +85,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <div className="h-8 px-2.5 bg-slate-100 text-slate-700 font-mono font-medium rounded border border-slate-200 flex items-center justify-center shrink-0 min-w-[54px] shadow-2xs">
             {activeCell ? activeCell.cellAddress : '—'}
           </div>
-          <div className="relative flex-1">
+          <div className="relative flex-1 flex items-center">
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-serif italic text-xs select-none">
               fx
             </span>
@@ -91,8 +94,26 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               readOnly
               value={activeCellValue}
               placeholder="Select any cell to inspect its value or formula"
-              className="w-full h-8 pl-8 pr-3 bg-slate-50 border border-slate-200 rounded text-slate-800 font-mono text-xs focus:outline-hidden focus:bg-white focus:border-emerald-500 transition-colors"
+              className="w-full h-8 pl-8 pr-8 bg-slate-50 border border-slate-200 rounded text-slate-800 font-mono text-xs focus:outline-hidden focus:bg-white focus:border-emerald-500 transition-colors"
             />
+            {activeCell && activeCellValue && (
+              <button
+                id="btn-copy-active-cell"
+                onClick={async () => {
+                  await copyToClipboard(activeCellValue);
+                  setHasCopiedFormula(true);
+                  setTimeout(() => setHasCopiedFormula(false), 1800);
+                }}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-emerald-700 hover:bg-slate-200/80 rounded transition-colors cursor-pointer"
+                title="Copy cell value (Ctrl+C)"
+              >
+                {hasCopiedFormula ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
           </div>
 
           {/* Active cell formatting indicators */}

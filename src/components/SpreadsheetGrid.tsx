@@ -6,6 +6,7 @@ import {
   ArrowUpAZ,
   Bookmark,
   BookmarkCheck,
+  Check,
 } from 'lucide-react';
 import {
   CellValue,
@@ -19,6 +20,8 @@ import { getColumnLetter } from '../utils/excelParser';
 import { cellStyleToCss } from '../utils/styleParser';
 import { renderHighlightedText, checkCellMatch } from '../utils/textHighlighter';
 import { FilterResultItem } from '../utils/filterEvaluator';
+import { copyToClipboard } from '../utils/clipboard';
+import { CellContextMenu } from './CellContextMenu';
 
 interface SpreadsheetGridProps {
   headers: string[];
@@ -238,10 +241,103 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
     }
   }, [headers]);
 
+  // Toast & Copied cell state for Excel copy feedback
+  const [copyToast, setCopyToast] = useState<{ message: string; cellAddress?: string } | null>(null);
+  const [copiedCellAddress, setCopiedCellAddress] = useState<string | null>(null);
+  const copyToastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    cellAddress: string;
+    cellValue: string;
+    columnName?: string;
+    colIndex: number;
+    rowValues?: CellValue[];
+    isRowHighlighted?: boolean;
+    rawRowIndex: number;
+  } | null>(null);
+
+  // Copy handler with visual feedback
+  const handleCopyValue = useCallback(
+    async (textToCopy: string, description: string, cellAddress?: string) => {
+      const success = await copyToClipboard(textToCopy);
+      if (success) {
+        if (cellAddress) {
+          setCopiedCellAddress(cellAddress);
+        }
+        setCopyToast({ message: description, cellAddress });
+        if (copyToastTimeoutRef.current) {
+          clearTimeout(copyToastTimeoutRef.current);
+        }
+        copyToastTimeoutRef.current = setTimeout(() => {
+          setCopyToast(null);
+          setCopiedCellAddress(null);
+        }, 2200);
+      }
+    },
+    []
+  );
+
+  // Global Ctrl+C / Cmd+C handler for active cell
+  useEffect(() => {
+    const handleGlobalCopy = (e: KeyboardEvent) => {
+      if (!((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c')) {
+        return;
+      }
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      const selection = window.getSelection();
+      if (selection && selection.toString().length > 0) {
+        return;
+      }
+
+      if (activeCell) {
+        const item = filteredItems.find((it) => it.originalIndex === activeCell.rawRowIndex);
+        if (item) {
+          e.preventDefault();
+          const cellVal = item.row[activeCell.colIndex];
+          const displayString = cellVal === null || cellVal === undefined ? '' : String(cellVal);
+          handleCopyValue(
+            displayString,
+            `Copied "${displayString.length > 24 ? displayString.slice(0, 24) + '…' : displayString}"`,
+            activeCell.cellAddress
+          );
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalCopy);
+    return () => window.removeEventListener('keydown', handleGlobalCopy);
+  }, [activeCell, filteredItems, handleCopyValue]);
+
   // Excel-like Keyboard Navigation
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (!activeCell || filteredItems.length === 0) return;
+
+      // Handle Ctrl+C / Cmd+C inside the table
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+        const selection = window.getSelection();
+        if (selection && selection.toString().length > 0) {
+          return;
+        }
+        const item = filteredItems[activeDisplayIndex];
+        if (item) {
+          e.preventDefault();
+          const cellVal = item.row[activeCell.colIndex];
+          const displayString = cellVal === null || cellVal === undefined ? '' : String(cellVal);
+          handleCopyValue(
+            displayString,
+            `Copied "${displayString.length > 24 ? displayString.slice(0, 24) + '…' : displayString}"`,
+            activeCell.cellAddress
+          );
+        }
+        return;
+      }
 
       let nextDisplayIndex = activeDisplayIndex >= 0 ? activeDisplayIndex : 0;
       let nextCol = activeCell.colIndex;
@@ -493,6 +589,33 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
                       {/* Row Header Cell - Clickable to toggle Row Highlight */}
                       <td
                         onClick={() => onToggleRowHighlight(rawRowIndex)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const firstColVal = item.row[0];
+                          const displayString = firstColVal === null || firstColVal === undefined ? '' : String(firstColVal);
+                          const cellAddress = `A${rawRowIndex + 1}`;
+                          onSelectCell(
+                            {
+                              rowIndex: displayRowIndex,
+                              colIndex: 0,
+                              rawRowIndex,
+                              cellAddress,
+                            },
+                            displayString
+                          );
+                          setContextMenu({
+                            x: e.clientX,
+                            y: e.clientY,
+                            cellAddress,
+                            cellValue: displayString,
+                            columnName: headers[0],
+                            colIndex: 0,
+                            rowValues: item.row,
+                            isRowHighlighted,
+                            rawRowIndex,
+                          });
+                        }}
                         className={`sticky left-0 z-10 w-[46px] min-w-[46px] max-w-[46px] border-r border-b text-center font-mono text-[10px] select-none cursor-pointer transition-colors ${
                           showGridLines ? 'border-[#e2e8f0]' : 'border-transparent'
                         } ${
@@ -502,7 +625,7 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
                             ? 'bg-amber-200/90 text-amber-950 font-bold border-r-amber-400'
                             : 'bg-[#f8fafc] text-slate-500 hover:bg-amber-100 hover:text-amber-900 group-hover:bg-slate-200'
                         }`}
-                        title="Click to highlight / unhighlight this entire row"
+                        title="Click to highlight / unhighlight • Right-click for options"
                       >
                         <div className="flex items-center justify-center gap-0.5 py-1 px-1">
                           {isRowHighlighted ? (
@@ -524,6 +647,9 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
                           activeCell?.rawRowIndex === rawRowIndex &&
                           activeCell?.colIndex === colIdx;
 
+                        const cellAddress = `${getColumnLetter(colIdx)}${rawRowIndex + 1}`;
+                        const isCopied = copiedCellAddress === cellAddress;
+
                         // Check if matches search highlight query
                         const hasSearchMatch = checkCellMatch(
                           displayString,
@@ -531,8 +657,6 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
                           textHighlight.caseSensitive,
                           textHighlight.exactMatch
                         );
-
-                        const cellAddress = `${getColumnLetter(colIdx)}${rawRowIndex + 1}`;
 
                         // Extract cell formatting
                         const cellStyle = item.styles?.[colIdx] ?? cellStyles?.[rawRowIndex]?.[colIdx];
@@ -558,10 +682,36 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
                                 displayString
                               )
                             }
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onSelectCell(
+                                {
+                                  rowIndex: displayRowIndex,
+                                  colIndex: colIdx,
+                                  rawRowIndex,
+                                  cellAddress,
+                                },
+                                displayString
+                              );
+                              setContextMenu({
+                                x: e.clientX,
+                                y: e.clientY,
+                                cellAddress,
+                                cellValue: displayString,
+                                columnName: headers[colIdx],
+                                colIndex: colIdx,
+                                rowValues: item.row,
+                                isRowHighlighted,
+                                rawRowIndex,
+                              });
+                            }}
                             className={`border-r border-b px-2.5 py-1 text-[11px] transition-colors cursor-cell truncate relative select-text ${
                               showGridLines ? 'border-[#e2e8f0]' : 'border-transparent'
                             } ${
-                              isSelected
+                              isCopied
+                                ? 'outline-2 outline-dashed outline-[#107c41] -outline-offset-2 z-20 bg-emerald-50/50'
+                                : isSelected
                                 ? 'outline-2 outline-[#107c41] -outline-offset-2 z-10 font-medium'
                                 : hasSearchMatch && textHighlight.query.trim()
                                 ? 'bg-amber-100/80'
@@ -612,6 +762,75 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
           </tbody>
         </table>
       </div>
+
+      {/* Context Menu on Cell Right-Click */}
+      {contextMenu && (
+        <CellContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          cellAddress={contextMenu.cellAddress}
+          cellValue={contextMenu.cellValue}
+          columnName={contextMenu.columnName}
+          rowValues={contextMenu.rowValues}
+          headers={headers}
+          isRowHighlighted={contextMenu.isRowHighlighted}
+          onClose={() => setContextMenu(null)}
+          onCopyValue={() => {
+            handleCopyValue(
+              contextMenu.cellValue,
+              `Copied "${contextMenu.cellValue.length > 24 ? contextMenu.cellValue.slice(0, 24) + '…' : contextMenu.cellValue}"`,
+              contextMenu.cellAddress
+            );
+          }}
+          onCopyReference={() => {
+            const val = `${contextMenu.columnName ? contextMenu.columnName + ': ' : ''}${contextMenu.cellValue}`;
+            handleCopyValue(val, `Copied reference: ${contextMenu.cellAddress}`, contextMenu.cellAddress);
+          }}
+          onCopyRowTsv={() => {
+            if (contextMenu.rowValues) {
+              const tsv = contextMenu.rowValues.map((v) => (v === null || v === undefined ? '' : String(v))).join('\t');
+              handleCopyValue(tsv, `Copied row ${contextMenu.rawRowIndex + 1} (TSV for Excel)`);
+            }
+          }}
+          onCopyRowCsv={() => {
+            if (contextMenu.rowValues) {
+              const csv = contextMenu.rowValues
+                .map((v) => {
+                  const str = String(v ?? '');
+                  return str.includes(',') || str.includes('"') || str.includes('\n')
+                    ? `"${str.replace(/"/g, '""')}"`
+                    : str;
+                })
+                .join(',');
+              handleCopyValue(csv, `Copied row ${contextMenu.rawRowIndex + 1} (CSV)`);
+            }
+          }}
+          onToggleHighlight={() => {
+            onToggleRowHighlight(contextMenu.rawRowIndex);
+          }}
+          onFilterByValue={() => {
+            if (onOpenColumnFilter) {
+              onOpenColumnFilter(contextMenu.colIndex);
+            }
+          }}
+        />
+      )}
+
+      {/* Floating Copy Confirmation Toast */}
+      {copyToast && (
+        <div
+          id="spreadsheet-copy-toast"
+          className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-slate-900/95 text-white text-xs px-3.5 py-2 rounded-lg shadow-2xl backdrop-blur-xs border border-slate-700 animate-in fade-in slide-in-from-bottom-2 duration-150 pointer-events-none"
+        >
+          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="font-medium">{copyToast.message}</span>
+          {copyToast.cellAddress && (
+            <span className="font-mono text-[10px] bg-slate-800 text-emerald-300 px-1.5 py-0.5 rounded border border-slate-700">
+              {copyToast.cellAddress}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Spreadsheet Status Bar */}
       <footer className="bg-[#f8fafc] border-t border-[#cbd5e1] px-4 py-1.5 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-600 select-none shrink-0">
